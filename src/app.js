@@ -8,6 +8,7 @@ const Vector = require('./vector');
 var canvas = document.getElementById('screen');
 var game = new Game(canvas, update, render);
 var player = {
+  angle: 0,
   position: {x: 200, y: 200},
   velocity: {x: 0, y: 0},
   img: new Image()
@@ -21,6 +22,70 @@ var backgrounds = [
 backgrounds[0].src = 'assets/foreground.png';
 backgrounds[1].src = 'assets/midground.png';
 backgrounds[2].src = 'assets/background.png';
+var input = {
+  up: false,
+  down: false,
+  left: false,
+  right: false
+}
+
+/**
+ * @function onkeydown
+ * Handles keydown events
+ */
+window.onkeydown = function(event) {
+  switch(event.key) {
+    case "ArrowUp":
+    case "w":
+      input.up = true;
+      event.preventDefault();
+      break;
+    case "ArrowDown":
+    case "s":
+      input.down = true;
+      event.preventDefault();
+      break;
+    case "ArrowLeft":
+    case "d":
+      input.left = true;
+      event.preventDefault();
+      break;
+    case "ArrowRight":
+    case "a":
+      input.right = true;
+      event.preventDefault();
+      break;
+  }
+}
+
+/**
+ * @function onkeyup
+ * Handles keydown events
+ */
+window.onkeyup = function(event) {
+  switch(event.key) {
+    case "ArrowUp":
+    case "w":
+      input.up = false;
+      event.preventDefault();
+      break;
+    case "ArrowDown":
+    case "s":
+      input.down = false;
+      event.preventDefault();
+      break;
+    case "ArrowLeft":
+    case "d":
+      input.left = false;
+      event.preventDefault();
+      break;
+    case "ArrowRight":
+    case "a":
+      input.right = false;
+      event.preventDefault();
+      break;
+  }
+}
 
 /**
  * @function masterLoop
@@ -43,6 +108,20 @@ masterLoop(performance.now());
  * the number of milliseconds passed since the last frame.
  */
 function update(elapsedTime) {
+  var speed = 1;
+
+  // set the velocity
+  player.velocity.x = 0;
+  if(input.left) player.velocity.x -= speed;
+  if(input.right) player.velocity.x += speed;
+  player.velocity.y = 0;
+  if(input.up) player.velocity.y -= speed / 2;
+  if(input.down) player.velocity.y += speed * 2;
+
+  // determine player angle
+  player.angle = 0;
+  if(player.velocity.x < 0) player.angle = -Math.PI/8;
+  if(player.velocity.x > 0) player.angle = Math.PI/8;
 
   // move the player
   player.position.x += player.velocity.x;
@@ -63,5 +142,9 @@ function render(elapsedTime, ctx) {
   ctx.drawImage(backgrounds[0], 0, 0);
 
   // Render the player
-  ctx.drawImage(player.img, 0, 0, 131, 53, 0, 0, 131, 53);
+  ctx.save();
+  ctx.translate(player.position.x, player.position.y);
+  ctx.rotate(player.angle);
+  ctx.drawImage(player.img, 0, 0, 131, 53, -60, 0, 131, 53);
+  ctx.restore();
 }
