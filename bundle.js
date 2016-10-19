@@ -36,6 +36,42 @@ var camera = {
   x: 0,
   y: 0
 }
+var reticule = {
+  x: 0,
+  y: 0
+}
+
+/**
+ * @function onmousemove
+ * Handles mouse move events
+ */
+window.onmousemove = function(event) {
+  event.preventDefault();
+  reticule.x = event.offsetX;
+  reticule.y = event.offsetY;
+}
+
+/**
+ * @function onmousedown
+ * Handles mouse left-click events
+ */
+window.onmousedown = function(event) {
+  event.preventDefault();
+  reticule.x = event.offsetX;
+  reticule.y = event.offsetY;
+  // TODO: Fire bullet in direction of the retciule
+}
+
+/**
+ * @function oncontextmenu
+ * Handles mouse right-click events
+ */
+window.oncontextmenu = function(event) {
+  event.preventDefault();
+  reticule.x = event.offsetX;
+  reticule.y = event.offsetY;
+  // TODO: Fire missile
+}
 
 /**
  * @function onkeydown
@@ -83,12 +119,12 @@ window.onkeyup = function(event) {
       event.preventDefault();
       break;
     case "ArrowLeft":
-    case "d":
+    case "a":
       input.left = false;
       event.preventDefault();
       break;
     case "ArrowRight":
-    case "a":
+    case "d":
       input.right = false;
       event.preventDefault();
       break;
@@ -180,6 +216,19 @@ function render(elapsedTime, ctx) {
   ctx.translate(player.position.x - camera.x, player.position.y);
   ctx.rotate(player.angle);
   ctx.drawImage(player.img, 0, 0, 131, 53, -60, 0, 131, 53);
+  ctx.restore();
+
+  // Render the reticule
+  ctx.save();
+  ctx.translate(reticule.x, reticule.y);
+  ctx.beginPath();
+  ctx.arc(0, 0, 10, 0, 2*Math.PI);
+  ctx.moveTo(0, 15);
+  ctx.lineTo(0, -15);
+  ctx.moveTo(15, 0);
+  ctx.lineTo(-15, 0);
+  ctx.strokeStyle = '#00ff00';
+  ctx.stroke();
   ctx.restore();
 }
 
