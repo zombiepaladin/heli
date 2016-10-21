@@ -31,7 +31,8 @@ var reticule = {
   y: 0
 }
 var bullets = new BulletPool(10);
-var player = new Player(bullets);
+var missiles = [];
+var player = new Player(bullets, missiles);
 
 /**
  * @function onmousemove
@@ -49,20 +50,22 @@ window.onmousemove = function(event) {
  */
 window.onmousedown = function(event) {
   event.preventDefault();
-  reticule.x = event.offsetX;
-  reticule.y = event.offsetY;
-  var direction = Vector.subtract(
-    reticule,
-    camera.toScreenCoordinates(player.position)
-  );
-  player.fireBullet(direction);
+    if(event.button == 0) {
+    reticule.x = event.offsetX;
+    reticule.y = event.offsetY;
+    var direction = Vector.subtract(
+      reticule,
+      camera.toScreenCoordinates(player.position)
+    );
+    player.fireBullet(direction);
+  }
 }
 
 /**
  * @function oncontextmenu
  * Handles mouse right-click events
  */
-window.oncontextmenu = function(event) {
+canvas.oncontextmenu = function(event) {
   event.preventDefault();
   reticule.x = event.offsetX;
   reticule.y = event.offsetY;
@@ -160,6 +163,18 @@ function update(elapsedTime) {
     if(!camera.onScreen(bullet)) return true;
     return false;
   });
+
+  // Update missiles
+  var markedForRemoval = [];
+  missiles.forEach(function(missile, i){
+    missile.update(elapsedTime);
+    if(!camera.onScreen(missile.position))
+      markedForRemoval.unshift(i);
+  });
+  // Remove missiles that have gone off-screen
+  markedForRemoval.forEach(function(index){
+    missiles.splice(index, 1);
+  });
 }
 
 /**
@@ -226,6 +241,11 @@ function renderBackgrounds(elapsedTime, ctx) {
 function renderWorld(elapsedTime, ctx) {
     // Render the bullets
     bullets.render(elapsedTime, ctx);
+
+    // Render the missiles
+    missiles.forEach(function(missile) {
+      missile.render(elapsedTime, ctx);
+    });
 
     // Render the player
     player.render(elapsedTime, ctx);

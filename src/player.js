@@ -2,6 +2,7 @@
 
 /* Classes and Libraries */
 const Vector = require('./vector');
+const Missile = require('./missile');
 
 /* Constants */
 const HELI_SPEED = 5;
@@ -18,7 +19,9 @@ module.exports = exports = Player;
  * Creates a player
  * @param {BulletPool} bullets the bullet pool
  */
-function Player(bullets) {
+function Player(bullets, missiles) {
+  this.missiles = missiles;
+  this.missileCount = 4;
   this.bullets = bullets;
   this.angle = 0;
   this.position = {x: 200, y: 200};
@@ -86,8 +89,14 @@ Player.prototype.fireBullet = function(direction) {
 
 /**
  * @function fireMissile
- * Fires a missile
+ * Fires a missile, if the player still has missiles
+ * to fire.
  */
 Player.prototype.fireMissile = function() {
-  // TODO: Implement missile
+  if(this.missileCount > 0){
+    var position = Vector.add(this.position, {x:0, y:30})
+    var missile = new Missile(position);
+    this.missiles.push(missile);
+    this.missileCount--;
+  }
 }
