@@ -1,20 +1,17 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 "use strict";
 
-/* Classes */
+/* Classes and Libraries */
 const Game = require('./game');
 const Vector = require('./vector');
+const Camera = require('./camera');
+const Player = require('./player');
+const BulletPool = require('./bullet_pool');
+
 
 /* Global variables */
 var canvas = document.getElementById('screen');
 var game = new Game(canvas, update, render);
-var player = {
-  angle: 0,
-  position: {x: 200, y: 200},
-  velocity: {x: 0, y: 0},
-  img: new Image()
-}
-player.img.src = 'assets/helicopter.png';
 var backgrounds = [
   new Image(),
   new Image(),
@@ -29,17 +26,13 @@ var input = {
   left: false,
   right: false
 }
-var camera = {
-  xMin: 100,
-  xMax: 500,
-  xOff: 100,
-  x: 0,
-  y: 0
-}
+var camera = new Camera(canvas);
 var reticule = {
   x: 0,
   y: 0
 }
+var bullets = new BulletPool(10);
+var player = new Player(bullets);
 
 /**
  * @function onmousemove
@@ -59,7 +52,11 @@ window.onmousedown = function(event) {
   event.preventDefault();
   reticule.x = event.offsetX;
   reticule.y = event.offsetY;
-  // TODO: Fire bullet in direction of the retciule
+  var direction = Vector.subtract(
+    reticule,
+    camera.toScreenCoordinates(player.position)
+  );
+  player.fireBullet(direction);
 }
 
 /**
@@ -70,7 +67,7 @@ window.oncontextmenu = function(event) {
   event.preventDefault();
   reticule.x = event.offsetX;
   reticule.y = event.offsetY;
-  // TODO: Fire missile
+  player.fireMissile();
 }
 
 /**
@@ -90,12 +87,12 @@ window.onkeydown = function(event) {
       event.preventDefault();
       break;
     case "ArrowLeft":
-    case "d":
+    case "a":
       input.left = true;
       event.preventDefault();
       break;
     case "ArrowRight":
-    case "a":
+    case "d":
       input.right = true;
       event.preventDefault();
       break;
@@ -152,39 +149,18 @@ masterLoop(performance.now());
  * the number of milliseconds passed since the last frame.
  */
 function update(elapsedTime) {
-  var speed = 5;
 
-  // set the velocity
-  player.velocity.x = 0;
-  if(input.left) player.velocity.x -= speed;
-  if(input.right) player.velocity.x += speed;
-  player.velocity.y = 0;
-  if(input.up) player.velocity.y -= speed / 2;
-  if(input.down) player.velocity.y += speed * 2;
-
-  // determine player angle
-  player.angle = 0;
-  if(player.velocity.x < 0) player.angle = -Math.PI/8;
-  if(player.velocity.x > 0) player.angle = Math.PI/8;
-
-  // move the player
-  player.position.x += player.velocity.x;
-  player.position.y += player.velocity.y;
+  // update the player
+  player.update(elapsedTime, input);
 
   // update the camera
-  camera.xOff += player.velocity.x;
-  console.log(camera.xOff, camera.xMax, camera.xOff > camera.xMax)
-  if(camera.xOff > camera.xMax) {
-    camera.x += camera.xOff - camera.xMax;
-    camera.xOff = camera.xMax;
-  }
-  if(camera.xOff < camera.xMin) {
-    camera.x -= camera.xMin - camera.xOff;
-    camera.xOff = camera.xMin;
-  }
+  camera.update(player.position);
 
-  if(camera.x < 0) camera.x = 0;
-
+  // Update bullets
+  bullets.update(elapsedTime, function(bullet){
+    if(!camera.onScreen(bullet)) return true;
+    return false;
+  });
 }
 
 /**
@@ -195,29 +171,74 @@ function update(elapsedTime) {
   * @param {CanvasRenderingContext2D} ctx the context to render to
   */
 function render(elapsedTime, ctx) {
+
   // Render the backgrounds
+  renderBackgrounds(elapsedTime, ctx);
+
+  // Transform the coordinate system using
+  // the camera position BEFORE rendering
+  // objects in the world - that way they
+  // can be rendered in WORLD cooridnates
+  // but appear in SCREEN coordinates
   ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  renderWorld(elapsedTime, ctx);
+  ctx.restore();
+
+  // Render the GUI without transforming the
+  // coordinate system
+  renderGUI(elapsedTime, ctx);
+}
+
+/**
+  * @function renderBackgrounds
+  * Renders the parallax scrolling backgrounds.
+  * @param {DOMHighResTimeStamp} elapsedTime
+  * @param {CanvasRenderingContext2D} ctx the context to render to
+  */
+function renderBackgrounds(elapsedTime, ctx) {
+  ctx.save();
+
+  // The background scrolls at 2% of the foreground speed
   ctx.translate(-camera.x * 0.2, 0);
   ctx.drawImage(backgrounds[2], 0, 0);
   ctx.restore();
 
+  // The midground scrolls at 60% of the foreground speed
   ctx.save();
   ctx.translate(-camera.x * 0.6, 0);
   ctx.drawImage(backgrounds[1], 0, 0);
   ctx.restore();
 
+  // The foreground scrolls in sync with the camera
   ctx.save();
   ctx.translate(-camera.x, 0);
   ctx.drawImage(backgrounds[0], 0, 0);
   ctx.restore();
+}
 
-  // Render the player
-  ctx.save();
-  ctx.translate(player.position.x - camera.x, player.position.y);
-  ctx.rotate(player.angle);
-  ctx.drawImage(player.img, 0, 0, 131, 53, -60, 0, 131, 53);
-  ctx.restore();
+/**
+  * @function renderWorld
+  * Renders the entities in the game world
+  * IN WORLD COORDINATES
+  * @param {DOMHighResTimeStamp} elapsedTime
+  * @param {CanvasRenderingContext2D} ctx the context to render to
+  */
+function renderWorld(elapsedTime, ctx) {
+    // Render the bullets
+    bullets.render(elapsedTime, ctx);
 
+    // Render the player
+    player.render(elapsedTime, ctx);
+}
+
+/**
+  * @function renderGUI
+  * Renders the game's GUI IN SCREEN COORDINATES
+  * @param {DOMHighResTimeStamp} elapsedTime
+  * @param {CanvasRenderingContext2D} ctx
+  */
+function renderGUI(elapsedTime, ctx) {
   // Render the reticule
   ctx.save();
   ctx.translate(reticule.x, reticule.y);
@@ -232,7 +253,174 @@ function render(elapsedTime, ctx) {
   ctx.restore();
 }
 
-},{"./game":2,"./vector":3}],2:[function(require,module,exports){
+},{"./bullet_pool":2,"./camera":3,"./game":4,"./player":5,"./vector":6}],2:[function(require,module,exports){
+"use strict";
+
+/**
+ * @module BulletPool
+ * A class for managing bullets in-game
+ * We use a Float32Array to hold our bullet info,
+ * as this creates a single memory buffer we can
+ * iterate over, minimizing cache misses.
+ * Values stored are: positionX, positionY, velocityX,
+ * velocityY in that order.
+ */
+module.exports = exports = BulletPool;
+
+/**
+ * @constructor BulletPool
+ * Creates a BulletPool of the specified size
+ * @param {uint} size the maximum number of bullets to exits concurrently
+ */
+function BulletPool(maxSize) {
+  this.pool = new Float32Array(4 * maxSize);
+  this.end = 0;
+  this.max = maxSize;
+}
+
+/**
+ * @function add
+ * Adds a new bullet to the end of the BulletPool.
+ * If there is no room left, no bullet is created.
+ * @param {Vector} position where the bullet begins
+ * @param {Vector} velocity the bullet's velocity
+*/
+BulletPool.prototype.add = function(position, velocity) {
+  if(this.end < this.max) {
+    this.pool[4*this.end] = position.x;
+    this.pool[4*this.end+1] = position.y;
+    this.pool[4*this.end+2] = velocity.x;
+    this.pool[4*this.end+3] = velocity.y;
+    this.end++;
+  }
+}
+
+/**
+ * @function update
+ * Updates the bullet using its stored velocity, and
+ * calls the callback function passing the transformed
+ * bullet.  If the callback returns true, the bullet is
+ * removed from the pool.
+ * Removed bullets are replaced with the last bullet's values
+ * and the size of the bullet array is reduced, keeping
+ * all live bullets at the front of the array.
+ * @param {DOMHighResTimeStamp} elapsedTime
+ * @param {function} callback called with the bullet's position,
+ * if the return value is true, the bullet is removed from the pool
+ */
+BulletPool.prototype.update = function(elapsedTime, callback) {
+  for(var i = 0; i < this.end; i++){
+    // Move the bullet
+    this.pool[4*i] += this.pool[4*i+2];
+    this.pool[4*i+1] += this.pool[4*i+3];
+    // If a callback was supplied, call it
+    if(callback && callback({
+      x: this.pool[4*i],
+      y: this.pool[4*i+1]
+    })) {
+      // Swap the current and last bullet if we
+      // need to remove the current bullet
+      this.pool[4*i] = this.pool[4*(this.end-1)];
+      this.pool[4*i+1] = this.pool[4*(this.end-1)+1];
+      this.pool[4*i+2] = this.pool[4*(this.end-1)+2];
+      this.pool[4*i+3] = this.pool[4*(this.end-1)+3];
+      // Reduce the total number of bullets by 1
+      this.end--;
+      // Reduce our iterator by 1 so that we update the
+      // freshly swapped bullet.
+      i--;
+    }
+  }
+}
+
+/**
+ * @function render
+ * Renders all bullets in our array.
+ * @param {DOMHighResTimeStamp} elapsedTime
+ * @param {CanvasRenderingContext2D} ctx
+ */
+BulletPool.prototype.render = function(elapsedTime, ctx) {
+  // Render the bullets as a single path
+  ctx.save();
+  ctx.beginPath();
+  ctx.fillStyle = "black";
+  for(var i = 0; i < this.end; i++) {
+    ctx.moveTo(this.pool[4*i], this.pool[4*i+1]);
+    ctx.arc(this.pool[4*i], this.pool[4*i+1], 2, 0, 2*Math.PI);
+  }
+  ctx.fill();
+  ctx.restore();
+}
+
+},{}],3:[function(require,module,exports){
+"use strict";
+
+/* Classes and Libraries */
+const Vector = require('./vector');
+
+/**
+ * @module Camera
+ * A class representing a simple camera
+ */
+module.exports = exports = Camera;
+
+/**
+ * @constructor Camera
+ * Creates a camera
+ * @param {Rect} screen the bounds of the screen
+ */
+function Camera(screen) {
+  this.x = 0;
+  this.y = 0;
+  this.width = screen.width;
+  this.height = screen.height;
+}
+
+/**
+ * @function update
+ * Updates the camera based on the supplied target
+ * @param {Vector} target what the camera is looking at
+ */
+Camera.prototype.update = function(target) {
+  this.x = target.x - 200;
+}
+
+/**
+ * @function onscreen
+ * Determines if an object is within the camera's gaze
+ * @param {Vector} target a point in the world
+ * @return true if target is on-screen, false if not
+ */
+Camera.prototype.onScreen = function(target) {
+  return (
+     target.x > this.x &&
+     target.x < this.x + this.width &&
+     target.y > this.y &&
+     target.y < this.y + this.height
+   );
+}
+
+/**
+ * @function toScreenCoordinates
+ * Translates world coordinates into screen coordinates
+ * @param {Vector} worldCoordinates
+ * @return the tranformed coordinates
+ */
+Camera.prototype.toScreenCoordinates = function(worldCoordinates) {
+  return Vector.subtract(worldCoordinates, this);
+}
+
+/**
+ * @function toWorldCoordinates
+ * Translates screen coordinates into world coordinates
+ * @param {Vector} screenCoordinates
+ * @return the tranformed coordinates
+ */
+Camera.prototype.toWorldCoordinates = function(screenCoordinates) {
+  return Vector.add(screenCoordinates, this);
+}
+
+},{"./vector":6}],4:[function(require,module,exports){
 "use strict";
 
 /**
@@ -290,16 +478,150 @@ Game.prototype.loop = function(newTime) {
   this.frontCtx.drawImage(this.backBuffer, 0, 0);
 }
 
-},{}],3:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
+"use strict";
+
+/* Classes and Libraries */
+const Vector = require('./vector');
+
+/* Constants */
+const HELI_SPEED = 5;
+const BULLET_SPEED = 10;
+
+/**
+ * @module Player
+ * A class representing a player's helicopter
+ */
+module.exports = exports = Player;
+
+/**
+ * @constructor Player
+ * Creates a player
+ * @param {BulletPool} bullets the bullet pool
+ */
+function Player(bullets) {
+  this.bullets = bullets;
+  this.angle = 0;
+  this.position = {x: 200, y: 200};
+  this.velocity = {x: 0, y: 0};
+  this.img = new Image()
+  this.img.src = 'assets/helicopter.png';
+}
+
+/**
+ * @function update
+ * Updates the player based on the supplied input
+ * @param {DOMHighResTimeStamp} elapedTime
+ * @param {Input} input object defining input, must have
+ * boolean properties: up, left, right, down
+ */
+Player.prototype.update = function(elapsedTime, input) {
+
+  // set the velocity
+  this.velocity.x = 0;
+  if(input.left) this.velocity.x -= HELI_SPEED;
+  if(input.right) this.velocity.x += HELI_SPEED;
+  this.velocity.y = 0;
+  if(input.up) this.velocity.y -= HELI_SPEED / 2;
+  if(input.down) this.velocity.y += HELI_SPEED * 2;
+
+  // determine player angle
+  this.angle = 0;
+  if(this.velocity.x < 0) this.angle = -Math.PI/8;
+  if(this.velocity.x > 0) this.angle = Math.PI/8;
+
+  // move the player
+  this.position.x += this.velocity.x;
+  this.position.y += this.velocity.y;
+
+  // don't let the player move off-screen
+  if(this.position.x < 200) this.position.x = 200;
+  if(this.position.y < 0) this.position.y = 0;
+  if(this.position.y > 400) this.position.y = 400;
+}
+
+/**
+ * @function render
+ * Renders the player helicopter in world coordinates
+ * @param {DOMHighResTimeStamp} elapsedTime
+ * @param {CanvasRenderingContext2D} ctx
+ */
+Player.prototype.render = function(elapasedTime, ctx) {
+  ctx.save();
+  ctx.translate(this.position.x, this.position.y);
+  ctx.rotate(this.angle);
+  ctx.drawImage(this.img, 0, 0, 131, 53, -60, 0, 131, 53);
+  ctx.restore();
+}
+
+/**
+ * @function fireBullet
+ * Fires a bullet
+ * @param {Vector} direction
+ */
+Player.prototype.fireBullet = function(direction) {
+  var position = Vector.add(this.position, {x:30, y:30});
+  var velocity = Vector.scale(Vector.normalize(direction), BULLET_SPEED);
+  this.bullets.add(position, velocity);
+}
+
+/**
+ * @function fireMissile
+ * Fires a missile
+ */
+Player.prototype.fireMissile = function() {
+  // TODO: Implement missile
+}
+
+},{"./vector":6}],6:[function(require,module,exports){
+"use strict";
+
 /**
  * @module Vector
  * A library of vector functions.
  */
 module.exports = exports = {
+  add: add,
+  subtract: subtract,
+  scale: scale,
   rotate: rotate,
   dotProduct: dotProduct,
   magnitude: magnitude,
   normalize: normalize
+}
+
+
+/**
+ * @function rotate
+ * Scales a vector
+ * @param {Vector} a - the vector to scale
+ * @param {float} scale - the scalar to multiply the vector by
+ * @returns a new vector representing the scaled original
+ */
+function scale(a, scale) {
+ return {x: a.x * scale, y: a.y * scale};
+}
+
+/**
+ * @function add
+ * Computes the sum of two vectors
+ * @param {Vector} a the first vector
+ * @param {Vector} b the second vector
+ * @return the computed sum
+*/
+function add(a, b) {
+ return {x: a.x + b.x, y: a.y + b.y};
+}
+
+/**
+ * @function subtract
+ * Computes the difference of two vectors
+ * @param {Vector} a the first vector
+ * @param {Vector} b the second vector
+ * @return the computed difference
+ */
+function subtract(a, b) {
+  return {x: a.x - b.x, y: a.y - b.y};
 }
 
 /**
